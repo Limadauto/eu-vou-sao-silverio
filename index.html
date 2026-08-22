@@ -146,11 +146,12 @@ document.querySelectorAll('.format').forEach(el=>el.onclick=()=>{
   setTimeout(update,20);
 });
 
-document.getElementById('download').onclick=()=>{
+document.getElementById('download').onclick=async()=>{
   const r=preview.classList.contains('ratio916')?'916':'11';
   const W=1080,H=r==='916'?1920:1080;
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const c=canvas.getContext('2d');
+
   // 1) FOTO POR BAIXO: a foto fica dentro do QUADRADO.
   if(img.naturalWidth){
     const pw=preview.clientWidth, ph=preview.clientHeight;
@@ -158,7 +159,6 @@ document.getElementById('download').onclick=()=>{
     const base=Math.min(ww/img.naturalWidth, wh/img.naturalHeight);
     const sw=img.naturalWidth*base*scale, sh=img.naturalHeight*base*scale;
     const left=(ww-sw)/2+x, top=(wh-sh)/2+y;
-
     const winLeft=photoWindow.offsetLeft;
     const winTop=photoWindow.offsetTop;
 
@@ -166,20 +166,59 @@ document.getElementById('download').onclick=()=>{
     c.beginPath();
     c.rect(winLeft/pw*W, winTop/ph*H, ww/pw*W, wh/ph*H);
     c.clip();
-
-    c.drawImage(
-      img,
-      (winLeft+left)/pw*W,
-      (winTop+top)/ph*H,
-      sw/pw*W,
-      sh/ph*H
-    );
+    c.drawImage(img,(winLeft+left)/pw*W,(winTop+top)/ph*H,sw/pw*W,sh/ph*H);
     c.restore();
   }
 
-  // 2) ARTE POR CIMA: moldura, bordas e "EU VOU!" ficam sobre a foto.
+  // 2) ARTE POR CIMA: moldura e "EU VOU!" ficam sobre a foto.
   c.drawImage(poster,0,0,W,H);
-  const a=document.createElement('a');a.download='sao-silverio-59-'+(r==='916'?'stories-reels':'quadrado')+'.png';a.href=canvas.toDataURL('image/png');a.click();
+
+  const filename='sao-silverio-59-'+(r==='916'?'stories-reels':'quadrado')+'.png';
+
+  // Gera um Blob: é muito mais compatível com celulares do que toDataURL().
+  canvas.toBlob(async(blob)=>{
+    if(!blob){alert('Não foi possível gerar a arte. Tente novamente.');return;}
+
+    const file=new File([blob],filename,{type:'image/png'});
+    const isInstagram=/Instagram/i.test(navigator.userAgent);
+
+    // No Instagram/Android/iPhone: primeiro tenta o compartilhamento nativo.
+    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+      try{
+        await navigator.share({
+          files:[file],
+          title:'59ª Corrida São Silvério',
+          text:'Minha arte oficial — 59ª Corrida São Silvério'
+        });
+        return;
+      }catch(err){
+        if(err && err.name==='AbortError') return;
+      }
+    }
+
+    const url=URL.createObjectURL(blob);
+
+    // Fallback especial para o navegador interno do Instagram:
+    // abre uma tela com a imagem pronta para o usuário tocar e segurar para salvar.
+    if(isInstagram){
+      const w=window.open('','_blank');
+      if(w){
+        w.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salvar sua arte</title><style>body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif;text-align:center;padding:16px;box-sizing:border-box}h2{font-size:20px;margin:8px 0 6px}p{font-size:15px;line-height:1.4;margin:8px auto 14px;max-width:420px}img{max-width:100%;height:auto;display:block;margin:0 auto 14px}a{display:inline-block;background:#ffd400;color:#111;padding:13px 18px;border-radius:10px;text-decoration:none;font-weight:700;margin:4px}small{display:block;color:#bbb;margin-top:8px}</style></head><body><h2>✅ Sua arte está pronta!</h2><p><b>Toque e segure sobre a imagem</b> e escolha <b>“Salvar imagem”</b> ou <b>“Adicionar às Fotos”</b>.</p><img id="result"><a id="save" download="${filename}">⬇️ Salvar imagem</a><small>Se o botão não funcionar dentro do Instagram, use o toque longo na imagem.</small><script>const u=${JSON.stringify(url)};document.getElementById('result').src=u;document.getElementById('save').href=u;<\/script></body></html>`);
+        w.document.close();
+        return;
+      }
+    }
+
+    // Fallback geral: download tradicional.
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=filename;
+    a.rel='noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+  },'image/png');
 };
 </script>
 </body>
